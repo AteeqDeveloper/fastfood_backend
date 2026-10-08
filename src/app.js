@@ -14,12 +14,20 @@ const menuRoutes = require('./routes/menu.routes');
 const cartRoutes = require('./routes/cart.routes');
 const orderRoutes = require('./routes/order.routes');
 const adminRoutes = require('./routes/admin.routes');
+const productRoutes = require('./routes/product.routes');
+const dealRoutes = require('./routes/deal.routes');
+const reviewRoutes = require('./routes/review.routes');
 
 const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: clientUrl || '*',
+  origin: (origin, callback) => {
+    if (!origin || nodeEnv === 'development' || origin.includes('localhost') || origin.includes('127.0.0.1') || origin === clientUrl) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(morgan(nodeEnv === 'development' ? 'dev' : 'combined'));
@@ -39,6 +47,9 @@ app.use('/api/menu', menuRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/deals', dealRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

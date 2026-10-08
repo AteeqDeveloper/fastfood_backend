@@ -6,23 +6,26 @@ const orderItemSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'MenuItem',
     },
-    name: {
-      type: String,
-      required: true,
-    },
+    id: mongoose.Schema.Types.Mixed,
+    title: { type: String },
+    name: { type: String },
     price: {
       type: Number,
       required: true,
       min: 0,
     },
+    qty: {
+      type: Number,
+      default: 1,
+    },
     quantity: {
       type: Number,
-      required: true,
+      default: 1,
       min: 1,
     },
     subtotal: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
   },
@@ -31,18 +34,18 @@ const orderItemSchema = new mongoose.Schema(
 
 const deliveryAddressSchema = new mongoose.Schema(
   {
-    address: { type: String, required: true },
-    city: { type: String, required: true },
+    address: { type: String, default: '' },
+    city: { type: String, default: '' },
     postalCode: { type: String, default: '' },
   },
   { _id: false }
 );
 
 const VALID_STATUS_TRANSITIONS = {
-  pending: ['confirmed', 'cancelled', 'rejected'],
+  pending: ['confirmed', 'cancelled', 'rejected', 'preparing'],
   confirmed: ['preparing', 'cancelled', 'rejected'],
-  preparing: ['ready', 'cancelled'],
-  ready: ['out_for_delivery'],
+  preparing: ['ready', 'cancelled', 'out_for_delivery', 'delivered'],
+  ready: ['out_for_delivery', 'delivered'],
   out_for_delivery: ['delivered'],
   delivered: [],
   cancelled: [],
@@ -51,22 +54,30 @@ const VALID_STATUS_TRANSITIONS = {
 
 const orderSchema = new mongoose.Schema(
   {
+    id: {
+      type: String,
+      index: true,
+    },
     orderNumber: {
       type: String,
       required: true,
       unique: true,
       index: true,
     },
+    customer: {
+      type: String,
+      default: 'Guest',
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,
       index: true,
     },
     restaurant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Restaurant',
-      required: true,
+      required: false,
       index: true,
     },
     items: {
@@ -74,17 +85,21 @@ const orderSchema = new mongoose.Schema(
       required: true,
       validate: [(v) => v.length > 0, 'Order must have at least one item'],
     },
+    address: {
+      type: String,
+      default: '',
+    },
     deliveryAddress: {
       type: deliveryAddressSchema,
-      required: true,
+      required: false,
     },
     phone: {
       type: String,
-      required: true,
+      default: '',
     },
     subtotal: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
     deliveryFee: {
@@ -104,27 +119,19 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'card', 'online'],
       default: 'cash',
     },
     paymentStatus: {
       type: String,
-      enum: ['pending', 'paid', 'failed', 'refunded'],
       default: 'pending',
+    },
+    status: {
+      type: String,
+      default: 'Preparing',
     },
     orderStatus: {
       type: String,
-      enum: [
-        'pending',
-        'confirmed',
-        'preparing',
-        'ready',
-        'out_for_delivery',
-        'delivered',
-        'cancelled',
-        'rejected',
-      ],
-      default: 'pending',
+      default: 'preparing',
       index: true,
     },
     notes: {

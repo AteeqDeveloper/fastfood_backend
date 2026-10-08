@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Restaurant = require('../models/Restaurant');
 const orderService = require('../services/order.service');
@@ -108,4 +109,159 @@ const getRestaurantOrders = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { placeOrder, getMyOrders, getOrder, cancelOrder, updateOrderStatus, getRestaurantOrders };
+const placeStorefrontOrder = async (req, res, next) => {
+  try {
+    const { id, customer, phone, address, items, total, status } = req.body;
+    const orderNumber = id || `SB-${Date.now().toString().slice(-6)}`;
+
+    const formattedItems = (items || []).map((i) => ({
+      id: i.id,
+      title: i.title || i.name || 'Item',
+      name: i.title || i.name || 'Item',
+      price: Number(i.price) || 0,
+      qty: Number(i.qty || i.quantity || 1),
+      quantity: Number(i.qty || i.quantity || 1),
+      subtotal: (Number(i.price) || 0) * Number(i.qty || i.quantity || 1),
+    }));
+
+    const defaultRestaurant = await Restaurant.findOne();
+
+    const newOrder = await Order.create({
+      id: orderNumber,
+      orderNumber,
+      customer: customer || 'Guest',
+      phone: phone || '',
+      address: address || '',
+      items: formattedItems,
+      total: Number(total) || 0,
+      subtotal: Number(total) || 0,
+      status: status || 'Preparing',
+      orderStatus: (status || 'preparing').toLowerCase().replace(/\s+/g, '_'),
+      restaurant: defaultRestaurant?._id,
+    });
+
+    const returnedOrder = {
+      id: newOrder.id || newOrder.orderNumber,
+      orderNumber: newOrder.orderNumber,
+      customer: newOrder.customer,
+      phone: newOrder.phone,
+      address: newOrder.address,
+      items: newOrder.items,
+      total: newOrder.total,
+      status: newOrder.status,
+      created_at: newOrder.createdAt,
+      createdAt: newOrder.createdAt,
+    };
+
+    return ApiResponse.created(res, 'Order placed successfully', returnedOrder);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const trackOrder = async (req, res, next) => {
+  try {
+    const raw = req.query.query || req.query.id || req.query.phone || '';
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return ApiResponse.success(res, 'No query provided', []);
+    }
+
+    const regex = new RegExp(`^${trimmed}$`, 'i');
+    const orders = await Order.find({
+      $or: [
+        { id: regex },
+        { orderNumber: regex },
+        { phone: trimmed },
+      ],
+    }).sort({ createdAt: -1 });
+
+    const formatted = orders.map((o) => ({
+      id: o.id || o.orderNumber,
+      orderNumber: o.orderNumber,
+      customer: o.customer || (o.user?.name) || 'Guest',
+      phone: o.phone,
+      address: o.address || o.deliveryAddress?.address || '',
+      items: o.items.map((i) => ({
+        id: i.id || i.menuItem,
+        title: i.title || i.name,
+        price: i.price,
+        qty: i.qty || i.quantity || 1,
+      })),
+      total: o.total,
+      status: o.status || o.orderStatus,
+      created_at: o.createdAt,
+      createdAt: o.createdAt,
+    }));
+
+    return ApiResponse.success(res, 'Orders fetched successfully', formatted);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const listAllOrdersAdmin = async (req, res, next) => {
+  try {
+    const orders = await Order.find().sort({ createdAt: -1 });
+    const formatted = orders.map((o) => ({
+      id: o.id || o.orderNumber,
+      _id: o._id,
+      orderNumber: o.orderNumber,
+      customer: o.customer || (o.user?.name) || 'Guest',
+      phone: o.phone,
+      address: o.address || o.deliveryAddress?.address || '',
+      items: o.items.map((i) => ({
+        id: i.id || i.menuItem,
+        title: i.title || i.name,
+        price: i.price,
+        qty: i.qty || i.quantity || 1,
+      })),
+      total: o.total,
+      status: o.status || o.orderStatus,
+      created_at: o.createdAt,
+      createdAt: o.createdAt,
+    }));
+
+    return ApiResponse.success(res, 'All orders fetched successfully', formatted);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateOrderStatusFlex = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    const filter = mongoose.Types.ObjectId.isValid(orderId)
+      ? { $or: [{ _id: orderId }, { id: orderId }, { orderNumber: orderId }] }
+      : { $or: [{ id: orderId }, { orderNumber: orderId }] };
+
+    const order = await Order.findOne(filter);
+    if (!order) return ApiResponse.error(res, 'Order not found', 404);
+
+    order.status = status;
+    order.orderStatus = status.toLowerCase().replace(/\s+/g, '_');
+    await order.save();
+
+    return ApiResponse.success(res, 'Order status updated successfully', {
+      id: order.id || order.orderNumber,
+      status: order.status,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  placeOrder,
+  getMyOrders,
+  getOrder,
+  cancelOrder,
+  updateOrderStatus,
+  getRestaurantOrders,
+  placeStorefrontOrder,
+  trackOrder,
+  listAllOrdersAdmin,
+  updateOrderStatusFlex,
+};
